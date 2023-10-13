@@ -1,0 +1,18 @@
+{
+	"build_systems":
+	[
+		{
+			"cmd": "gcc src/*.c -Wall -Wextra -Wshadow -ansi -pedantic -std=c11 -I include -o bin/main && start bin/main.exe",
+			"name": "Build",
+			"selector": "source.c",
+			"shell": true,
+			"working_dir": "${project_path}"
+		}
+	],
+	"folders":
+	[
+		{
+			"path": "."
+		}
+	]
+}
