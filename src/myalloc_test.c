@@ -3,39 +3,41 @@
 int main()
 {
 
-	printf("\n-------------------\n General test : \n-------------------\n\n");
+	// printf("\n-------------------\n General test : \n-------------------\n\n");
 
-	test_general();
+	// test_general();
 
-	printf("\n-------------------\n Free test 1 : \n-------------------\n\n");
+	// printf("\n-------------------\n Free test 1 : \n-------------------\n\n");
 
-	test_free1();
+	// test_free1();
 
-	printf("\n-------------------\n Free test 2 : \n-------------------\n\n");
+	// printf("\n-------------------\n Free test 2 : \n-------------------\n\n");
 
-	test_free2();
+	// test_free2();
 
-	printf("\n-------------------\n Malloc test 1 : \n-------------------\n\n");
+	// printf("\n-------------------\n Malloc test 1 : \n-------------------\n\n");
 
-	test_malloc1();
+	// test_malloc1();
 
-	printf("\n-------------------\n Malloc test 2 : \n-------------------\n\n");
+	// printf("\n-------------------\n Malloc test 2 : \n-------------------\n\n");
 
-	test_malloc2();
+	// test_malloc2();
 
-	printf("\n-------------------\n Realloc test : \n-------------------\n\n");
+	// printf("\n-------------------\n Realloc test : \n-------------------\n\n");
 
-	test_realloc();
+	// test_realloc();
 
-	printf("\n-------------------\n Header test : \n-------------------\n\n");
+	// printf("\n-------------------\n Header test : \n-------------------\n\n");
 
-	test_header();
+	// test_header();
 
-	printf("\n-------------------\n Speed test : \n-------------------\n\n");
+	// printf("\n-------------------\n Speed test : \n-------------------\n\n");
 
-	speed_test(100000); // one hundred million tests
+	// speed_test(100000); // one hundred million tests
 
-	while(1){};
+	// while(1){};
+
+	test_large_block();
 
 	return 0;
 }

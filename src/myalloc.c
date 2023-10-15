@@ -17,10 +17,12 @@ struct SmallBlock
 	char body[SIZE_BLK_SMALL];
 };
 
-struct LargeBlock
+typedef struct LargeBlock_s LargeBlock;
+
+struct LargeBlock_s
 {
 	// The LSB of the header tells if the block is in use (LSB = 1) or not (LSB = 0)
-	struct LargeBlock* header;
+	size_t header;
 	size_t size;
 	// Body of the block
 	char body[];
@@ -32,15 +34,16 @@ struct LargeBlock
 struct SmallBlock small_tab[MAX_SMALL];
 struct SmallBlock* firstFreeBlock;
 int isInit = 0;
-struct LargeBlock* big_free = NULL;
+LargeBlock* big_free = NULL;
 
 
 // Initialize memory headers by setting up the chained list of free blocks
 void initialize_memory()
 {
 	big_free = NULL;
-	big_free = (struct LargeBlock*)sbrk(SIZE_BLK_LARGE);
+	big_free = (LargeBlock*)sbrk(SIZE_BLK_LARGE);
 	big_free->size = SIZE_BLK_LARGE;
+	big_free->header = 0;
 
 	firstFreeBlock = small_tab;
 	for(int i = 0; i < MAX_SMALL - 1; ++i)
@@ -54,7 +57,31 @@ void initialize_memory()
 // Returns 1 if the pointer is within the boundaries of memory and else 0
 int is_memory_safe(void* ptr)
 {
-	return ptr >= (void*)((size_t*)small_tab - 1) && ptr < (void*)(small_tab + MAX_SMALL);
+	return ptr >= (void*)((size_t*)small_tab - 1);
+}
+
+
+void test_large_block()
+{
+	printf("big_free : %p\n", (void*)big_free);
+
+	uint64_t* tab = myMalloc(sizeof(uint64_t) * 30);
+
+	for(int i = 0 ; i < 20; i++)
+	{
+		tab[i] = (uint64_t)(i*i*i);
+	}
+
+	printf("big_free : %p\n", (void*)big_free);
+
+
+	myFree(tab);
+
+	myFree(tab);
+
+	printf("big_free : %p\n", (void*)big_free);
+	printf("big_free header : %p\n", (void*)big_free->header);
+	printf("big_free header header : %p\n", (void*)((LargeBlock*)big_free->header)->header);
 }
 
 
@@ -62,22 +89,57 @@ int is_memory_safe(void* ptr)
 // Returns a pointer to the body of a memory block
 void* myMalloc(size_t size)
 {
+	if(!isInit)
+	{
+		initialize_memory();
+	}
+
 	if(size > SIZE_BLK_SMALL)
 	{
-		printf("ERROR : Size is too large.\n");
-		return NULL;
+		size_t targetSize = size + 2*sizeof(size_t);
+
+		LargeBlock* currentLargeBlock = big_free;
+		LargeBlock* prevLargeBlock = NULL;
+
+		do
+		{
+			if(currentLargeBlock->size > targetSize)
+			{
+				if(currentLargeBlock->size < targetSize + SIZE_BLK_SMALL)
+				{
+					if(prevLargeBlock != NULL)
+					{
+						prevLargeBlock->header = currentLargeBlock->header;
+					}
+					else
+					{
+						big_free = (LargeBlock*)currentLargeBlock->header;
+					}
+					currentLargeBlock->header += 1;
+					return (void*)currentLargeBlock->body;
+				}
+			}
+
+			prevLargeBlock = currentLargeBlock;
+			currentLargeBlock = (LargeBlock*)currentLargeBlock->header;
+		}
+		while(currentLargeBlock != NULL);
+		
+
+		LargeBlock* newBlock = sbrk(targetSize);
+		newBlock->header += 1;
+		newBlock->size = targetSize;
+
+
+		return (void*)newBlock->body;
+		
+
 	}
+
 	if(firstFreeBlock == NULL)
 	{
-		if(!isInit)
-		{
-			initialize_memory();
-		}
-		else
-		{
-			printf("ERROR : No memory available.\n");
-			return NULL;
-		}
+		printf("ERROR : No memory available.\n");
+		return NULL;
 	}
 
 	void* finalPtr = (void*)((size_t*)firstFreeBlock + 1);
@@ -88,27 +150,53 @@ void* myMalloc(size_t size)
 
 }
 
+
+
 // Frees the block associated to the pointer
 void myFree(void* ptr)
 {
 	// Here, we check if the pointer points to the start of the body of a block
-	if(!is_memory_safe(ptr) || (int)((char*)((size_t*)ptr - 1) - (char*)small_tab ) % 128 != 0)
+	if(!is_memory_safe(ptr))
 	{
 		printf("ERROR : incorrect address.\n");
 		return;
 	}
+	
 
-	// Get the header of the current block
-	size_t currentHeader = *((size_t*)ptr - 1);
-	if(currentHeader % 2 == 0)
+	if(ptr < (void*)(small_tab + MAX_SMALL))
 	{
-		printf("ERROR : referenced block not in use.\n");
-		return;
-	}
+		if((int)((char*)((size_t*)ptr - 1) - (char*)small_tab ) % 128 != 0)
+		{
+			printf("ERROR : incorrect address.\n");
+			return;
+		}
 
-	// Clears the LSB of the header of the block
-	*((size_t*)ptr - 1) = (size_t)firstFreeBlock;
-	firstFreeBlock = (struct SmallBlock*)((size_t*)ptr - 1);
+		// Get the header of the current block
+		size_t currentHeader = *((size_t*)ptr - 1);
+		if(currentHeader % 2 == 0)
+		{
+			printf("ERROR : referenced block not in use.\n");
+			return;
+		}
+
+		// Clears the LSB of the header of the block
+		*((size_t*)ptr - 1) = (size_t)firstFreeBlock;
+		firstFreeBlock = (struct SmallBlock*)((size_t*)ptr - 1);
+	}
+	else
+	{
+		int isLargeBlock = *((size_t*)ptr - 2) & 1;
+		if(isLargeBlock)
+		{
+			*((size_t*)ptr - 2) = (size_t)big_free;
+			big_free = (LargeBlock*)(((size_t*)ptr - 2));
+		}
+		else
+		{
+			printf("ERROR : referenced block not in use.\n");
+			return;
+		}
+	}
 
 }
 
@@ -117,32 +205,59 @@ void myFree(void* ptr)
 // Frees the block associated to the pointer and reallocate it for new data
 void* myRealloc(void* ptr, size_t size)
 {
-	if(!is_memory_safe(ptr) || (int)((char*)((size_t*)ptr - 1) - (char*)small_tab ) % 128 != 0)
+	if(!is_memory_safe(ptr))
 	{
 		printf("ERROR : incorrect address.\n");
 		return NULL;
 	}
 
+
 	if(size > SIZE_BLK_SMALL)
 	{
-		printf("ERROR : Size is too large.\n");
-		return NULL;
-	}
+		int isLargeBlock = *((size_t*)ptr - 2) & 1;
+		if(isLargeBlock)
+		{
+			LargeBlock* currentLargeBlock = (LargeBlock*)((size_t*)ptr - 2);
 
-	size_t currentHeader = *((size_t*)ptr - 1);
-	if(currentHeader % 2 == 0)
+			if(size < currentLargeBlock->size)
+			{
+				return ptr;
+			}
+
+			void* newPtr =  myMalloc(size);
+			myFree(ptr);
+			return newPtr;
+		}
+		else
+		{
+			printf("ERROR : referenced block not in use.\n");
+			return NULL;
+		}
+	}
+	else
 	{
-		printf("ERROR : referenced block not in use.\n");
-		return NULL;
+		if(ptr < (void*)(small_tab + MAX_SMALL) || (int)((char*)((size_t*)ptr - 1) - (char*)small_tab ) % 128 != 0)
+		{
+			printf("ERROR : incorrect address.\n");
+			return NULL;
+		}
+
+		size_t currentHeader = *((size_t*)ptr - 1);
+		if(currentHeader % 2 == 0)
+		{
+			printf("ERROR : referenced block not in use.\n");
+			return NULL;
+		}
+
+		// Returns pointer if valid block of used memory
+		return ptr;
 	}
 
-	// Returns pointer if valid block of used memory
-	return ptr;
 }
 
 void speed_test(size_t testNB)
 {
-	printf("Speed test for %u tests : \n", testNB);
+	printf("Speed test for %u tests : \n", (unsigned int)testNB);
 	int* addresses[MAX_SMALL];
 	clock_t start_time, end_time;
 

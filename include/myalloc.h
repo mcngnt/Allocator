@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdint.h>
 
 
 // Memory test functions //
@@ -53,5 +54,6 @@ void test_malloc2();
 void test_realloc();
 void test_header();
 void speed_test(size_t testNB);
+void test_large_block();
 
 
