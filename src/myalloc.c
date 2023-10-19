@@ -61,29 +61,6 @@ int is_memory_safe(void* ptr)
 }
 
 
-void test_large_block()
-{
-	printf("big_free : %p\n", (void*)big_free);
-
-	uint64_t* tab = myMalloc(sizeof(uint64_t) * 30);
-
-	for(int i = 0 ; i < 20; i++)
-	{
-		tab[i] = (uint64_t)(i*i*i);
-	}
-
-	printf("big_free : %p\n", (void*)big_free);
-
-
-	myFree(tab);
-
-	myFree(tab);
-
-	printf("big_free : %p\n", (void*)big_free);
-	printf("big_free header : %p\n", (void*)big_free->header);
-	printf("big_free header header : %p\n", (void*)((LargeBlock*)big_free->header)->header);
-}
-
 
 
 // Returns a pointer to the body of a memory block
@@ -96,16 +73,16 @@ void* myMalloc(size_t size)
 
 	if(size > SIZE_BLK_SMALL)
 	{
-		size_t targetSize = size + 2*sizeof(size_t);
+		size_t fullSize = size + 2*sizeof(size_t);
 
 		LargeBlock* currentLargeBlock = big_free;
 		LargeBlock* prevLargeBlock = NULL;
 
-		do
+		while(currentLargeBlock != NULL)
 		{
-			if(currentLargeBlock->size > targetSize)
+			if(currentLargeBlock->size >= size)
 			{
-				if(currentLargeBlock->size < targetSize + SIZE_BLK_SMALL)
+				if(currentLargeBlock->size < size + SIZE_BLK_SMALL)
 				{
 					if(prevLargeBlock != NULL)
 					{
@@ -118,17 +95,30 @@ void* myMalloc(size_t size)
 					currentLargeBlock->header += 1;
 					return (void*)currentLargeBlock->body;
 				}
+				else
+				{
+					int k = ( fullSize / sizeof(size_t) ) * sizeof(size_t);
+					if(k < fullSize)
+					{
+						k += sizeof(size_t);
+					}
+					
+					currentLargeBlock->size -= k;
+					LargeBlock* newBlock = (LargeBlock*)(currentLargeBlock->body + currentLargeBlock->size);
+					newBlock->header = 1;
+					newBlock->size = k - 2 * sizeof(size_t);
+					return (void*)newBlock->body;
+				}
 			}
 
-			prevLargeBlock = currentLargeBlock;
+			prevLargeBlock = currentLargeBlock;	
 			currentLargeBlock = (LargeBlock*)currentLargeBlock->header;
 		}
-		while(currentLargeBlock != NULL);
 		
 
-		LargeBlock* newBlock = sbrk(targetSize);
+		LargeBlock* newBlock = sbrk(fullSize);
 		newBlock->header += 1;
-		newBlock->size = targetSize;
+		newBlock->size = size;
 
 
 		return (void*)newBlock->body;
@@ -186,10 +176,32 @@ void myFree(void* ptr)
 	else
 	{
 		int isLargeBlock = *((size_t*)ptr - 2) & 1;
+		LargeBlock* freeBlock = (LargeBlock*)((size_t*)ptr - 2);
 		if(isLargeBlock)
 		{
-			*((size_t*)ptr - 2) = (size_t)big_free;
-			big_free = (LargeBlock*)(((size_t*)ptr - 2));
+			if(big_free == NULL)
+			{
+				big_free = freeBlock;
+				big_free->header = (size_t)NULL;
+				return;
+			}
+
+			if( ((char*)big_free + 2*sizeof(size_t) + big_free->size ) == (char*)freeBlock )
+			{
+				big_free->size += freeBlock->size + 2 * sizeof(size_t);
+				return;
+			}
+
+			if( ((char*)freeBlock +  + 2*sizeof(size_t) + freeBlock->size) == (char*)big_free )
+			{
+				freeBlock->size += big_free->size + 2 * sizeof(size_t);
+				freeBlock->header = big_free->header;
+				big_free = freeBlock;
+				return;
+			}
+			
+			freeBlock->header = (size_t)big_free;
+			big_free = freeBlock;
 		}
 		else
 		{
@@ -210,50 +222,105 @@ void* myRealloc(void* ptr, size_t size)
 		printf("ERROR : incorrect address.\n");
 		return NULL;
 	}
+	
+	size_t blockSize = 0;
 
-
-	if(size > SIZE_BLK_SMALL)
+	if(ptr < (void*)(small_tab + MAX_SMALL) && *((size_t*)ptr - 1) & 1)
 	{
-		int isLargeBlock = *((size_t*)ptr - 2) & 1;
-		if(isLargeBlock)
-		{
-			LargeBlock* currentLargeBlock = (LargeBlock*)((size_t*)ptr - 2);
-
-			if(size < currentLargeBlock->size)
-			{
-				return ptr;
-			}
-
-			void* newPtr =  myMalloc(size);
-			myFree(ptr);
-			return newPtr;
-		}
-		else
-		{
-			printf("ERROR : referenced block not in use.\n");
-			return NULL;
-		}
+		blockSize = SIZE_BLK_SMALL;
 	}
-	else
+	if(*((size_t*)ptr - 2) & 1)
 	{
-		if(ptr < (void*)(small_tab + MAX_SMALL) || (int)((char*)((size_t*)ptr - 1) - (char*)small_tab ) % 128 != 0)
-		{
-			printf("ERROR : incorrect address.\n");
-			return NULL;
-		}
+		blockSize = *((size_t*)ptr - 1);
+	}
+	if(blockSize == 0)
+	{
+		printf("ERROR : incorrect address or block already in use.\n");
+		return NULL;
+	}
 
-		size_t currentHeader = *((size_t*)ptr - 1);
-		if(currentHeader % 2 == 0)
-		{
-			printf("ERROR : referenced block not in use.\n");
-			return NULL;
-		}
-
-		// Returns pointer if valid block of used memory
+	if(blockSize > size)
+	{
 		return ptr;
 	}
 
+	void* newPtr = myMalloc(size);
+
+	for (size_t i = 0; i < blockSize; i++)
+	{
+		*((char*)newPtr + i) = *((char*)ptr + i);
+	}
+
+	myFree(ptr);
+
+	return newPtr;
+	
 }
+
+void print_free_large_blocks()
+{
+	LargeBlock* currentLargeBlock = big_free;
+	LargeBlock* prevLargeBlock = NULL;
+	int counter = 0;
+
+	printf("State of large blocks memory : \n");
+
+	if(big_free == NULL)
+	{
+		printf("No large blocks in big_free.\n");
+	}
+
+	while(currentLargeBlock != NULL)
+	{
+		printf("Large block %d with address %p has a size of %d and a header of %p\n", counter, (void*)currentLargeBlock, (int)currentLargeBlock->size, (void*)currentLargeBlock->header);
+
+		prevLargeBlock = currentLargeBlock;
+		currentLargeBlock = (LargeBlock*)currentLargeBlock->header;
+		counter++;
+	}
+
+	printf("End of state of large blocks memory.\n");
+	
+}
+
+
+void test_large_block()
+{
+	print_small_blocks_used();
+	printf("Current value of big_free (not initialized) : %p\n", (void*)big_free);
+
+	char* tab = myMalloc(30 * sizeof(char));
+
+	for(int i = 0 ; i < 26; i++)
+	{
+		tab[i] = (char)('A'+i);
+	}
+
+	printf("Malloc array of 30 chars and has written the letters of the alphabet\n");
+
+	print_block_content(tab);
+
+	print_free_large_blocks();
+
+	print_small_blocks_used();
+
+	char* tab2 = myRealloc(tab, sizeof(uint64_t) * 100);
+
+	printf("Realloc the char array to a 100 elements array of 64 bits unsigned integers\n");
+
+	print_block_content(tab2);
+
+	print_free_large_blocks();
+
+	print_small_blocks_used();
+
+	myFree(tab2);
+
+	printf("Free the unisnged int array\n");
+
+	print_free_large_blocks();
+}
+
 
 void speed_test(size_t testNB)
 {
@@ -386,9 +453,9 @@ void write_safe_char(void* ptr,char value)
 
 
 // Shows which blocks of memory are used ( o for free and x if used)
-void print_blocks_used()
+void print_small_blocks_used()
 {
-	printf("State of memory : \n");
+	printf("State of small blocks memory : \n");
 
 	for(int i = 0; i < MAX_SMALL; ++i)
 	{
@@ -402,22 +469,40 @@ void print_blocks_used()
 		}
 	}
 
-	printf("\nEnd of state of memory.\n");
+	printf("\nEnd of state of small blocks memory.\n");
 }
 
 
-// Shows the content of a block by displaying the asci representation of each of its bytes
+// Shows the content of a block by displaying the ascii representation of each of its bytes
 void print_block_content(void* ptr)
 {
-	char* currentBlock = (char*)( (size_t*)( (char*)ptr - (char*)(( (char*)ptr - (char*)small_tab ) % 128) ) + 1 );
-	int blockID = (int)( (char*)currentBlock - (char*)((size_t*)small_tab + 1) ) / 128;
-	printf("Content of the %dth block (address %p) : \n", blockID, ptr);
-	for (unsigned int i = 0; i < SIZE_BLK_SMALL; ++i)
-	{
-		printf("%c/", *(currentBlock + i));
-	}
-	printf("\nEnd of the %dth block (address %p) .\n", blockID, ptr);
+	// char* currentBlock = (char*)( (size_t*)( (char*)ptr - (char*)(( (char*)ptr - (char*)small_tab ) % 128) ) + 1 );
+	
+	// int blockID = (int)( (char*)currentBlock - (char*)((size_t*)small_tab + 1) ) / 128;
 
+	if(ptr < (void*)(small_tab + MAX_SMALL))
+	{
+		void* currentBlock = (void*)((size_t*)ptr - 1);
+		int blockID = (int)( (char*)ptr - (char*)((size_t*)small_tab + 1) ) / 128;
+
+		printf("Content of the %dth small block (address %p) : \n", blockID, currentBlock);
+		for (unsigned int i = 0; i < SIZE_BLK_SMALL; ++i)
+		{
+			printf("%c/", *((char*)ptr + i));
+		}
+		printf("\nEnd of the %dth small block (address %p) .\n", blockID, currentBlock);
+	}
+	else
+	{
+		LargeBlock* currentLargeBlock = (LargeBlock*)((size_t*)ptr - 2);
+
+		printf("Content of large block (address %p) : \n", (void*)currentLargeBlock);
+		for (unsigned int i = 0; i < currentLargeBlock->size; ++i)
+		{
+			printf("%c/", *((char*)ptr + i));
+		}
+		printf("\nEnd of large block (address %p) .\n", (void*)currentLargeBlock);
+	}
 }
 
 
@@ -487,13 +572,13 @@ void test_general()
 	print_block_content(ptr2);
 
 	// Only 1 is used (0)
-	print_blocks_used();
+	print_small_blocks_used();
 
 	myFree((void*)ptr2);
 
 	printf("Just freed block with address : %p\n", (void*)ptr2);
 
-	print_blocks_used();
+	print_small_blocks_used();
 }
 
 void test_free1()
@@ -510,7 +595,7 @@ void test_free1()
 	printf("Just allocated memory with body pointer : %p\n", (void*)ptr3);
 
 	// Only three blocks used
-	print_blocks_used();
+	print_small_blocks_used();
 
 	myFree(ptr);
 	printf("Just freed block with address : %p\n", (void*)ptr);
@@ -520,7 +605,7 @@ void test_free1()
 	printf("Just freed block with address : %p\n", (void*)ptr2);
 
 	// No block used
-	print_blocks_used();
+	print_small_blocks_used();
 }
 
 void test_free2()
@@ -529,7 +614,7 @@ void test_free2()
 	printf("Just allocated memory with body pointer : %p\n", (void*)ptr);
 
 	// One block used
-	print_blocks_used();
+	print_small_blocks_used();
 
 	myFree(ptr);
 	printf("Just freed block with address : %p\n", (void*)ptr);
@@ -539,7 +624,7 @@ void test_free2()
 	printf("Just freed block with address : %p\n", (void*)ptr);
 
 	// No block used
-	print_blocks_used();
+	print_small_blocks_used();
 }
 
 void test_malloc1()
@@ -562,12 +647,12 @@ void test_malloc1()
 		}
 	}
 
-	print_blocks_used();
+	print_small_blocks_used();
 
 	initialize_memory();
 	printf("Memory all cleared\n");
 
-	print_blocks_used();
+	print_small_blocks_used();
 
 
 }
@@ -576,7 +661,7 @@ void test_malloc2()
 {
 	printf("Error because trying to store a 128 int array in a smallblock : \n");
 	int* ptr = (int*)( myMalloc(128*sizeof(int)) );
-	print_blocks_used();
+	print_small_blocks_used();
 	printf("Error because the int array was never allocated : \n");
 	myFree(ptr);
 }
@@ -618,7 +703,7 @@ void test_realloc()
 
 void test_header()
 {
-	print_blocks_used();
+	print_small_blocks_used();
 
 	int* test = myMalloc(sizeof(int));
 	printf("Just allocated memory with body pointer : %p\n", (void*)test);
@@ -626,7 +711,7 @@ void test_header()
 	write_safe_int(test, -177);
 	printf("Just wrote int %d at the address : %p\n", -177, (void*)(test));
 
-	print_blocks_used();
+	print_small_blocks_used();
 
 	char* test2 = myMalloc(sizeof(char)*10);
 	printf("Just allocated memory with body pointer : %p\n", (void*)test2);
@@ -635,7 +720,7 @@ void test_header()
 	printf("Just wrote char %c at the address : %p\n", 'E', (void*)(test2));
 
 
-	print_blocks_used();
+	print_small_blocks_used();
 
 
 	printf("Small tab address : %p\n", (void*)small_tab);

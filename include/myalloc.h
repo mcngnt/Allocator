@@ -40,7 +40,9 @@ void write_safe_char(void* ptr,char value);
 // Shows the content of a block by displaying the asci representation of each of its bytes
 void print_block_content(void* ptr);
 // Shows which blocks of memory are used ( o for free and x if used)
-void print_blocks_used();
+void print_small_blocks_used();
+// Prints the list of free large block on the heap with their size, address and header
+void print_free_large_blocks();
 
 
 
