@@ -56,6 +56,7 @@ void test_malloc2();
 void test_realloc();
 void test_header();
 void speed_test(size_t testNB);
-void test_large_block();
+void test_large_block1();
+void test_large_block2();
 
 

@@ -23,7 +23,7 @@ struct LargeBlock_s
 {
 	// The LSB of the header tells if the block is in use (LSB = 1) or not (LSB = 0)
 	size_t header;
-	// Size in bytes of the body of the large block
+	// Size in bytes of the lerge blokc (ie size of body + 2*sizeof(size_t))
 	size_t size;
 	// Body of the block
 	char body[];
@@ -42,7 +42,7 @@ LargeBlock* big_free = NULL;
 void initialize_memory()
 {
 	big_free = NULL;
-	big_free = (LargeBlock*)sbrk(SIZE_BLK_LARGE + 2 * sizeof(size_t));
+	big_free = (LargeBlock*)sbrk(SIZE_BLK_LARGE);
 	big_free->size = SIZE_BLK_LARGE;
 	big_free->header = 0;
 
@@ -86,9 +86,9 @@ void* myMalloc(size_t size)
 
 		while(currentLargeBlock != NULL)
 		{
-			if(currentLargeBlock->size >= size)
+			if(currentLargeBlock->size >= fullSize)
 			{
-				if(currentLargeBlock->size < size + SIZE_BLK_SMALL)
+				if(currentLargeBlock->size < fullSize + SIZE_BLK_SMALL)
 				{
 					if(prevLargeBlock != NULL)
 					{
@@ -103,11 +103,10 @@ void* myMalloc(size_t size)
 				}
 				else
 				{
-					
 					currentLargeBlock->size -= fullSizeMultSize;
-					LargeBlock* newBlock = (LargeBlock*)(currentLargeBlock->body + currentLargeBlock->size);
+					LargeBlock* newBlock = (LargeBlock*)((char*)currentLargeBlock + currentLargeBlock->size);
 					newBlock->header = 1;
-					newBlock->size = fullSizeMultSize - 2 * sizeof(size_t);
+					newBlock->size = fullSizeMultSize;
 					return (void*)newBlock->body;
 				}
 			}
@@ -118,10 +117,10 @@ void* myMalloc(size_t size)
 		
 
 		LargeBlock* newBlock = sbrk(fullSizeMultSize);
-		newBlock->header += 1;
-		newBlock->size = size;
+		newBlock->header = 1;
+		newBlock->size = fullSizeMultSize;
 
-
+		
 		return (void*)newBlock->body;
 		
 
@@ -152,6 +151,7 @@ void myFree(void* ptr)
 		printf("ERROR : incorrect address.\n");
 		return;
 	}
+
 	
 
 	if(ptr < (void*)(small_tab + MAX_SMALL))
@@ -179,6 +179,7 @@ void myFree(void* ptr)
 		// I check if the address header of the block has a LSB of 1 (ie it is used)
 		int isLargeBlock = *((size_t*)ptr - 2) & 1;
 		LargeBlock* freeBlock = (LargeBlock*)((size_t*)ptr - 2);
+
 		if(isLargeBlock)
 		{
 			if(big_free == NULL)
@@ -193,20 +194,28 @@ void myFree(void* ptr)
 			LargeBlock* prevLargeBlock = NULL;
 
 
+
 			while(currentLargeBlock != NULL)
 			{
-
-				if( ((char*)currentLargeBlock + 2*sizeof(size_t) + currentLargeBlock->size ) == (char*)freeBlock )
+				if( ((char*)currentLargeBlock + currentLargeBlock->size ) == (char*)freeBlock )
 				{
-					currentLargeBlock->size += freeBlock->size + 2 * sizeof(size_t);
+					currentLargeBlock->size += freeBlock->size;
 					return;
 				}
 
-				if( ((char*)freeBlock +  + 2*sizeof(size_t) + freeBlock->size) == (char*)currentLargeBlock )
+
+				if( ((char*)freeBlock + freeBlock->size) == (char*)currentLargeBlock )
 				{
-					freeBlock->size += currentLargeBlock->size + 2 * sizeof(size_t);
+					freeBlock->size += currentLargeBlock->size;
 					freeBlock->header = currentLargeBlock->header;
-					prevLargeBlock->header = (size_t)freeBlock;
+					if(prevLargeBlock != NULL)
+					{
+						prevLargeBlock->header = (size_t)freeBlock;
+					}
+					else
+					{
+						big_free = freeBlock;
+					}
 					return;
 				}
 
@@ -238,30 +247,31 @@ void* myRealloc(void* ptr, size_t size)
 		return NULL;
 	}
 	
-	size_t blockSize = 0;
+	size_t bodySize = 0;
 
 	if(ptr < (void*)(small_tab + MAX_SMALL) && *((size_t*)ptr - 1) & 1)
 	{
-		blockSize = SIZE_BLK_SMALL;
+		bodySize = SIZE_BLK_SMALL;
 	}
 	if(*((size_t*)ptr - 2) & 1)
 	{
-		blockSize = *((size_t*)ptr - 1);
+		bodySize = *((size_t*)ptr - 1) - 2*sizeof(size_t);
 	}
-	if(blockSize == 0)
+	if(bodySize == 0)
 	{
 		printf("ERROR : incorrect address or block already in use.\n");
 		return NULL;
 	}
 
-	if(blockSize > size)
+	if(bodySize > size)
 	{
+		
 		return ptr;
 	}
 
 	void* newPtr = myMalloc(size);
 
-	for (size_t i = 0; i < blockSize; i++)
+	for (size_t i = 0; i < bodySize; i++)
 	{
 		*((char*)newPtr + i) = *((char*)ptr + i);
 	}
@@ -299,19 +309,19 @@ void print_free_large_blocks()
 }
 
 
-void test_large_block()
+void test_large_block1()
 {
 	print_small_blocks_used();
 	print_free_large_blocks();
 
-	char* tab = myMalloc(303 * sizeof(char));
+	char* tab = myMalloc(70 * sizeof(char));
 
 	for(int i = 0 ; i < 58; i++)
 	{
 		tab[i] = (char)('A'+i);
 	}
 
-	printf("Malloc array of 303 chars and has written the letters of the alphabet\n");
+	printf("Malloc array of 70 chars and has written the letters of the alphabet\n");
 
 	print_block_content(tab);
 
@@ -336,6 +346,73 @@ void test_large_block()
 	print_free_large_blocks();
 }
 
+void test_large_block2()
+{
+	print_small_blocks_used();
+	print_free_large_blocks();
+
+	char* tab = myMalloc(100 * sizeof(char));
+
+	printf("Malloc array of 100 chars\n");
+
+	print_small_blocks_used();
+
+	uint64_t* tab2 = myMalloc(100 * sizeof(uint64_t));
+
+	printf("Malloc array of 100 uint64_t\n");
+
+	print_free_large_blocks();
+
+	int* tab3 = myMalloc(300 * sizeof(int));
+
+	printf("Malloc array of 300 int\n");
+
+	print_free_large_blocks();
+
+	myFree(tab3);
+
+	printf("Free array of 300 int\n");
+
+	print_free_large_blocks();
+
+	for (size_t i = 0; i < 100; i++)
+	{
+		tab2[i] = i*i;
+	}
+
+	printf("Write squares in uint_64 array\n");
+
+	print_block_content(tab2);
+
+	char* tab4 = myMalloc(128 * sizeof(char));
+
+	printf("Malloc array of 128 chars\n");
+
+	print_free_large_blocks();
+
+
+	float* tab5 = myRealloc(tab2, 10*sizeof(float));
+
+	printf("Realloc array of 100 uint64 to 10 float\n");
+
+	myFree(tab);
+	printf("Free array of 100 char\n");
+	print_free_large_blocks();
+
+
+	myFree(tab5);
+	printf("Free array of 10 float\n");
+	print_free_large_blocks();
+
+	myFree(tab4);
+	printf("Free array of 128 char\n");
+	print_free_large_blocks();
+
+	print_small_blocks_used();
+
+	
+}
+
 
 void speed_test(size_t testNB)
 {
@@ -349,7 +426,7 @@ void speed_test(size_t testNB)
 	{
 		for (size_t i = 0; i < MAX_SMALL; ++i)
 		{
-			addresses[i] = myMalloc(sizeof(int)*10);
+			addresses[i] = myMalloc(sizeof(int)*20);
 		}
 		for (size_t i = 0; i < MAX_SMALL; ++i)
 		{
@@ -366,7 +443,7 @@ void speed_test(size_t testNB)
 	{
 		for (size_t i = 0; i < MAX_SMALL; ++i)
 		{
-			addresses[i] = malloc(sizeof(int)*10);
+			addresses[i] = malloc(sizeof(int)*20);
 		}
 		for (size_t i = 0; i < MAX_SMALL; ++i)
 		{

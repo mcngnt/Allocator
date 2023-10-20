@@ -19,9 +19,9 @@ int main()
 
 	test_malloc1();
 
-	printf("\n-------------------\n Small blocks malloc test 2 : \n-------------------\n\n");
+	// printf("\n-------------------\n Small blocks malloc test 2 : \n-------------------\n\n");
 
-	test_malloc2();
+	// test_malloc2();
 
 	printf("\n-------------------\n Small blocks  realloc test : \n-------------------\n\n");
 
@@ -31,9 +31,13 @@ int main()
 
 	test_header();
 
-	printf("\n-------------------\n Large blocks test : \n-------------------\n\n");
+	printf("\n-------------------\n Large blocks test 1: \n-------------------\n\n");
 
-	test_large_block();
+	test_large_block1();
+
+	printf("\n-------------------\n Large blocks test 2 : \n-------------------\n\n");
+
+	test_large_block2();
 
 	printf("\n-------------------\n Speed test : \n-------------------\n\n");
 
