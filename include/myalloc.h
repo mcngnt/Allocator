@@ -26,13 +26,13 @@ void* myRealloc(void* ptr, size_t size);
 // Memory reading and writing functions //
 
 // Returns int at a pointer address in memory after checking that the pointer is valid
-int read_safe_int(void* ptr);
+int read_safe_int_small(void* ptr);
 // Returns char at a pointer address in memory after checking that the pointer is valid
-char read_safe_char(void* ptr);
+char read_safe_char_small(void* ptr);
 // Writes int at a pointer address in memory after checking that the pointer is valid
-void write_safe_int(void* ptr,int value);
+void write_safe_int_small(void* ptr,int value);
 // Writes char at a pointer address in memory after checking that the pointer is valid
-void write_safe_char(void* ptr,char value);
+void write_safe_char_small(void* ptr,char value);
 
 
 // Debug functions //

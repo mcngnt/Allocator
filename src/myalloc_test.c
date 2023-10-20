@@ -39,7 +39,7 @@ int main()
 
 	speed_test(100000); // one hundred million tests
 
-	while(1){};
+	// while(1){};
 
 	return 0;
 }
