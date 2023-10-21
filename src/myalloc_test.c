@@ -43,6 +43,8 @@ int main()
 
 	speed_test(100000); // one hundred million tests
 
+	// printf("poop");
+
 	// while(1){};
 
 	return 0;
