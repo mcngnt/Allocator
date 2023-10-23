@@ -67,6 +67,10 @@ int is_memory_safe(void* ptr)
 void initialize_memory()
 {
 	big_free = (LargeBlock*)sbrk(SIZE_BLK_LARGE);
+	if(big_free == (void*)-1)
+	{
+		printf("ERROR : no memory available on the heap.");
+	}
 	big_free->size = SIZE_BLK_LARGE;
 	big_free->header = (size_t)NULL;
 
@@ -131,7 +135,7 @@ void* myMalloc(size_t size)
 				}
 				else
 				{
-					// Else, the block is cut into two parts to avoid fragmentation
+					// Else, the block is split into two parts to avoid fragmentation
 					currentLargeBlock->size -= fullSizeMultSize;
 					LargeBlock* newBlock = (LargeBlock*)((char*)currentLargeBlock + currentLargeBlock->size);
 					newBlock->header = 1;
@@ -369,7 +373,7 @@ void* myRealloc(void* ptr, size_t size)
 
 
 // Prints the list of free large block on the heap with their size, address and header
-void print_free_large_blocks()
+void print_large_blocks_used()
 {
 	LargeBlock* currentLargeBlock = big_free;
 	int counter = 0;
@@ -576,7 +580,7 @@ void write_safe_char_small(void* ptr,char value)
 void test_large_block1()
 {
 	print_small_blocks_used();
-	print_free_large_blocks();
+	print_large_blocks_used();
 
 	char* tab = myMalloc(70 * sizeof(char));
 
@@ -589,7 +593,7 @@ void test_large_block1()
 
 	print_block_content(tab);
 
-	print_free_large_blocks();
+	print_large_blocks_used();
 
 	print_small_blocks_used();
 
@@ -599,7 +603,7 @@ void test_large_block1()
 
 	print_block_content(tab2);
 
-	print_free_large_blocks();
+	print_large_blocks_used();
 
 	print_small_blocks_used();
 
@@ -607,13 +611,13 @@ void test_large_block1()
 
 	printf("Free the unsigned int array\n");
 
-	print_free_large_blocks();
+	print_large_blocks_used();
 }
 
 void test_large_block2()
 {
 	print_small_blocks_used();
-	print_free_large_blocks();
+	print_large_blocks_used();
 
 	char* tab = myMalloc(100 * sizeof(char));
 
@@ -625,19 +629,19 @@ void test_large_block2()
 
 	printf("Malloc array of 100 uint64_t\n");
 
-	print_free_large_blocks();
+	print_large_blocks_used();
 
 	int* tab3 = myMalloc(300 * sizeof(int));
 
 	printf("Malloc array of 300 int\n");
 
-	print_free_large_blocks();
+	print_large_blocks_used();
 
 	myFree(tab3);
 
 	printf("Free array of 300 int\n");
 
-	print_free_large_blocks();
+	print_large_blocks_used();
 
 	for (size_t i = 0; i < 100; i++)
 	{
@@ -652,7 +656,7 @@ void test_large_block2()
 
 	printf("Malloc array of 128 chars\n");
 
-	print_free_large_blocks();
+	print_large_blocks_used();
 
 
 	float* tab5 = myRealloc(tab2, 10*sizeof(float));
@@ -660,20 +664,20 @@ void test_large_block2()
 	printf("Realloc array of 100 uint64 to 10 float\n");
 
 	print_block_content(tab5);
-	print_free_large_blocks();
+	print_large_blocks_used();
 
 	myFree(tab);
 	printf("Free array of 100 char\n");
-	print_free_large_blocks();
+	print_large_blocks_used();
 
 
 	myFree(tab5);
 	printf("Free array of 10 float\n");
-	print_free_large_blocks();
+	print_large_blocks_used();
 
 	myFree(tab4);
 	printf("Free array of 128 char\n");
-	print_free_large_blocks();
+	print_large_blocks_used();
 
 	print_small_blocks_used();
 

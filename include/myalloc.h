@@ -22,7 +22,7 @@ void print_block_content(void* ptr);
 // Shows which blocks of memory are used ( o for free and x if used)
 void print_small_blocks_used();
 // Prints the list of free large block on the heap with their size, address and header
-void print_free_large_blocks();
+void print_large_blocks_used();
 
 
 // Memory reading and writing functions //
