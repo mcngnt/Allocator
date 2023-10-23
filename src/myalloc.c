@@ -2,8 +2,6 @@
 
 
 #define MAX_SMALL 100
-
-
 #define SIZE_BLK_SMALL 128 - sizeof(size_t)
 
 #define SIZE_BLK_LARGE 1024
@@ -37,9 +35,11 @@ typedef struct LargeBlock_s LargeBlock;
 
 
 // The memory
-SmallBlock small_tab[MAX_SMALL];
-SmallBlock* firstFreeBlock;
+
 int isInit = 0;
+SmallBlock small_tab[MAX_SMALL];
+
+SmallBlock* firstFreeBlock;
 LargeBlock* big_free = NULL;
 
 
@@ -95,21 +95,17 @@ void initialize_memory()
 void* myMalloc(size_t size)
 {
 	if(!isInit)
-	{
 		initialize_memory();
-	}
 
 	if(size > SIZE_BLK_SMALL)
 	{
-		// Fullsize is the size of a block with a body fo size size
+		// Fullsize is the size of a block with a body size of size
 		size_t fullSize = size + 2*sizeof(size_t);
 
 		// fullSizeMultSize is the size of a block multiple of sizeof(size_t) (for keeping blocks aligned)
 		size_t fullSizeMultSize = ( fullSize / sizeof(size_t) ) * sizeof(size_t);
 		if(fullSizeMultSize < fullSize)
-		{
 			fullSizeMultSize += sizeof(size_t);
-		}
 
 		LargeBlock* currentLargeBlock = big_free;
 		LargeBlock* prevLargeBlock = NULL;
@@ -117,10 +113,11 @@ void* myMalloc(size_t size)
 		// Looping over free large blocks to find one big enough to fit fullSizeMult
 		while(currentLargeBlock != NULL)
 		{
-			if(currentLargeBlock->size >= fullSize)
+			if(currentLargeBlock->size >= fullSizeMultSize)
 			{
 				// Here the block is small enough for keeping it intact
-				if(currentLargeBlock->size < fullSize + SIZE_BLK_SMALL)
+
+				if(currentLargeBlock->size < fullSizeMultSize + SIZE_BLK_SMALL)
 				{
 					if(prevLargeBlock != NULL)
 					{
@@ -136,6 +133,7 @@ void* myMalloc(size_t size)
 				else
 				{
 					// Else, the block is split into two parts to avoid fragmentation
+
 					currentLargeBlock->size -= fullSizeMultSize;
 					LargeBlock* newBlock = (LargeBlock*)((char*)currentLargeBlock + currentLargeBlock->size);
 					newBlock->header = 1;
@@ -150,10 +148,10 @@ void* myMalloc(size_t size)
 		
 		// If no block large enough is found, memory is allocated on the heap
 
-		LargeBlock* newBlock = sbrk(fullSizeMultSize);
+		LargeBlock* newBlock = (LargeBlock*)sbrk(fullSizeMultSize);
 		if(newBlock == (void*)-1)
 		{
-			printf("ERROR : no memory available on the heap.");
+			printf("ERROR : no memory available on the heap.\n");
 			return NULL;
 		}
 		newBlock->header = 1;
@@ -176,13 +174,6 @@ void* myMalloc(size_t size)
 	SmallBlock* newBlock = firstFreeBlock;
 	firstFreeBlock = (SmallBlock*)newBlock->header;
 	newBlock->header = 1;
-
-
-	// void* finalPtr = (void*)((size_t*)firstFreeBlock + 1);
-	// *((size_t*)firstFreeBlock) += 1;
-	// firstFreeBlock = (struct SmallBlock*)(*(size_t*)firstFreeBlock - 1);
-
-	// return finalPtr;
 
 	return newBlock->body;
 
@@ -219,7 +210,7 @@ void myFree(void* ptr)
 			return;
 		}
 
-		// Set the header to points to the nest free block
+		// Set the header to points to the first free block
 		currentSmallBlock->header = (size_t)firstFreeBlock;
 		firstFreeBlock = currentSmallBlock;
 	}
@@ -324,7 +315,7 @@ void* myRealloc(void* ptr, size_t size)
 			if(fullSizeMultSize < fullSize)
 				fullSizeMultSize += sizeof(size_t);
 
-			// If the block is too large, I keep the first part of the block for the user (keeping intact the first part of its data)
+			// If the block is too large, I keep the first part of the block for the user (keeping intact the first part of it's data)
 			// and I free the other part
 
 			LargeBlock* currentLargeBlock = (LargeBlock*)((size_t*)ptr - 2);
@@ -685,8 +676,6 @@ void test_large_block2()
 	myFree(tab5 + 3000);
 
 
-	printf("small_tab : %p break address : %p diff : %ld", (void*)small_tab, sbrk(0), sbrk(0) - (void*)small_tab);
-
 	
 }
 
@@ -939,7 +928,7 @@ void test_header()
 
 void speed_test(size_t testNB)
 {
-	printf("Speed test for %u tests : \n", (unsigned int)testNB);
+	printf("Small blocks speed test for %u tests : \n", (unsigned int)testNB);
 	int* addresses[MAX_SMALL];
 	clock_t start_time, end_time;
 
@@ -957,7 +946,8 @@ void speed_test(size_t testNB)
 		}
 	}
 	end_time = clock();
-    
+
+
     printf("Time taken homemade allocator: %f seconds\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
 
     start_time = clock();
@@ -976,5 +966,45 @@ void speed_test(size_t testNB)
 	end_time = clock();
     
     printf("Time taken stdlib allocator: %f seconds\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
+
+
+    printf("Large blocks speed test for %u tests : \n", (unsigned int)testNB);
+
+	start_time = clock();
+
+	for (size_t nb = 0; nb < testNB; ++nb)
+	{
+		for (size_t i = 0; i < MAX_SMALL; ++i)
+		{
+			addresses[i] = myMalloc(sizeof(int)*100);
+		}
+		for (size_t i = 0; i < MAX_SMALL; ++i)
+		{
+			myFree(addresses[i]);
+		}
+	}
+	end_time = clock();
+
+	print_large_blocks_used();
+    
+    printf("Time taken homemade allocator: %f seconds\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
+
+    start_time = clock();
+
+	for (size_t nb = 0; nb < testNB; ++nb)
+	{
+		for (size_t i = 0; i < MAX_SMALL; ++i)
+		{
+			addresses[i] = malloc(sizeof(int)*100);
+		}
+		for (size_t i = 0; i < MAX_SMALL; ++i)
+		{
+			free(addresses[i]);
+		}
+	}
+	end_time = clock();
+    
+    printf("Time taken stdlib allocator: %f seconds\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
+
 
 }

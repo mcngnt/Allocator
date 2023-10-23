@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <stdint.h>
 
+void *sbrk(intptr_t increment);
 
 // Memory management functions //
 

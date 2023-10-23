@@ -15,13 +15,9 @@ int main()
 
 	test_free2();
 
-	printf("\n-------------------\n Small blocks malloc test 1 : \n-------------------\n\n");
+	printf("\n-------------------\n Small blocks malloc test : \n-------------------\n\n");
 
 	test_malloc1();
-
-	// printf("\n-------------------\n Small blocks malloc test 2 : \n-------------------\n\n");
-
-	// test_malloc2();
 
 	printf("\n-------------------\n Small blocks  realloc test : \n-------------------\n\n");
 
